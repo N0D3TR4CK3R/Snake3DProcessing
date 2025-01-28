@@ -4,6 +4,8 @@ char currentDirection = 'D'; // Dirección inicial
 char previousDirection = 'D'; // Dirección previa para evitar giros opuestos
 boolean isGameOver = false; // Estado del juego
 boolean easyMode = true; // Modo de juego: true para fácil, false para difícil
+PVector food; // Posición de la esfera
+int score = 0; // Contador de puntos
 
 void setup() {
   size(800, 800, P3D); // Tamaño del lienzo con vista 3D
@@ -13,6 +15,9 @@ void setup() {
   for (int i = 0; i < snake.length; i++) {
     snake[i] = new PVector(-i * boxSize, 0, 0); // Cubos alineados en X
   }
+
+  // Generar la primera posición de la esfera
+  generateFood();
 }
 
 void draw() {
@@ -22,6 +27,8 @@ void draw() {
     textAlign(CENTER, CENTER);
     textSize(32);
     text("Game Over", width / 2, height / 2);
+    textSize(20);
+    text("Puntaje: " + score, width / 2, height / 2 + 50);
     return;
   }
 
@@ -46,6 +53,15 @@ void draw() {
     box(boxSize);
     popMatrix();
   }
+
+  // Dibujar la esfera (comida)
+  drawFood();
+
+  // Mostrar el puntaje
+  fill(255);
+  textSize(20);
+  textAlign(LEFT, TOP);
+  text("Puntaje: " + score, 10, 10);
 
   // Actualizar la posición de la serpiente
   updateSnake();
@@ -91,6 +107,15 @@ void drawBarriers() {
   }
 }
 
+void drawFood() {
+  pushMatrix();
+  translate(width / 2 + food.x, height / 2 - food.y, food.z);
+  fill(0, 0, 200);
+  noStroke();
+  sphere(boxSize / 2); // Dibujar la esfera como comida
+  popMatrix();
+}
+
 void updateSnake() {
   // Calcular la próxima posición de la cabeza
   PVector nextPosition = snake[0].copy();
@@ -120,6 +145,12 @@ void updateSnake() {
     }
   }
 
+  // Verificar colisión con la comida
+  if (nextPosition.equals(food)) {
+    score++;
+    generateFood();
+  }
+
   // Actualizar las posiciones de la serpiente (cada segmento sigue al anterior)
   for (int i = snake.length - 1; i > 0; i--) {
     snake[i] = snake[i - 1].copy();
@@ -128,6 +159,18 @@ void updateSnake() {
   // Mover la cabeza a la nueva posición
   snake[0] = nextPosition;
   previousDirection = currentDirection; // Actualizar la dirección previa
+}
+
+void generateFood() {
+  int cols = 800 / boxSize - 1; // Número de columnas
+  int rows = 800 / boxSize - 1; // Número de filas
+
+  // Generar una posición aleatoria dentro de los límites de la cuadrícula (sin incluir barreras)
+  do {
+    int x = (int) random(-cols / 2, cols / 2) * boxSize;
+    int y = (int) random(-rows / 2, rows / 2) * boxSize;
+    food = new PVector(x, y, 0);
+  } while (x <= -400 || x >= 400 || y <= -400 || y >= 400);
 }
 
 void keyPressed() {
