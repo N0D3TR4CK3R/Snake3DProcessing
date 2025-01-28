@@ -6,6 +6,7 @@ boolean isGameOver = false; // Estado del juego
 boolean easyMode = true; // Modo de juego: true para fácil, false para difícil
 PVector food; // Posición de la esfera
 int score = 0; // Contador de puntos
+boolean isGameStarted = false; // Indica si el juego ha comenzado
 
 void setup() {
   size(800, 800, P3D); // Tamaño del lienzo con vista 3D
@@ -21,20 +22,20 @@ void setup() {
 }
 
 void draw() {
+  if (!isGameStarted) {
+    drawStartScreen(); // Mostrar pantalla de inicio
+    return;
+  }
+
   if (isGameOver) {
     background(0);
-    fill(255, 0, 0);
-    textAlign(CENTER, CENTER);
-    textSize(32);
-    text("Game Over", width / 2, height / 2);
-    textSize(20);
-    text("Puntaje: " + score, width / 2, height / 2 + 50);
+    drawUI(); // Dibujar UI específica para Game Over
     return;
   }
 
   background(30);
   lights();
-  
+
   // Configurar la vista isométrica
   camera(width / 2.0, height / 2.0, 800, width / 2.0, height / 2.0, 0, 0, 1, 0);
 
@@ -57,14 +58,34 @@ void draw() {
   // Dibujar la esfera (comida)
   drawFood();
 
-  // Mostrar el puntaje
-  fill(255);
-  textSize(20);
-  textAlign(LEFT, TOP);
-  text("Puntaje: " + score, 10, 10);
+  // Dibujar la UI
+  hint(DISABLE_DEPTH_TEST); // Deshabilitar profundidad para superponer UI
+  drawUI();
+  hint(ENABLE_DEPTH_TEST); // Rehabilitar profundidad después de dibujar la UI
 
   // Actualizar la posición de la serpiente
   updateSnake();
+}
+
+void drawStartScreen() {
+  background(0);
+
+  // Dibujar el logo (placeholder: un rectángulo)
+  fill(255, 0, 0);
+  rectMode(CENTER);
+  rect(width / 2, height / 2 - 100, 200, 100);
+
+  // Dibujar los botones de dificultad
+  fill(0, 255, 0);
+  rect(width / 2, height / 2 + 50, 150, 50); // Botón "Normal"
+  rect(width / 2, height / 2 + 150, 150, 50); // Botón "Difícil"
+
+  // Texto de los botones
+  fill(0);
+  textSize(24);
+  textAlign(CENTER, CENTER);
+  text("Normal", width / 2, height / 2 + 50);
+  text("Difícil", width / 2, height / 2 + 150);
 }
 
 void drawGrid() {
@@ -116,6 +137,26 @@ void drawFood() {
   popMatrix();
 }
 
+void drawUI() {
+  // Configurar estilo de texto
+  fill(255);
+  textSize(20);
+  textAlign(LEFT, TOP);
+
+  // Mostrar puntaje en la esquina superior izquierda
+  text("Puntaje: " + score, 10, 10);
+
+  // Si el juego terminó, mostrar texto adicional
+  if (isGameOver) {
+    fill(255, 0, 0);
+    textSize(32);
+    textAlign(CENTER, CENTER);
+    text("Game Over", width / 2, height / 2);
+    textSize(20);
+    text("Puntaje: " + score, width / 2, height / 2 + 50);
+  }
+}
+
 void updateSnake() {
   // Calcular la próxima posición de la cabeza
   PVector nextPosition = snake[0].copy();
@@ -149,6 +190,7 @@ void updateSnake() {
   if (nextPosition.equals(food)) {
     score++;
     generateFood();
+    growSnake(); // Aumentar la longitud de la serpiente
   }
 
   // Actualizar las posiciones de la serpiente (cada segmento sigue al anterior)
@@ -159,18 +201,63 @@ void updateSnake() {
   // Mover la cabeza a la nueva posición
   snake[0] = nextPosition;
   previousDirection = currentDirection; // Actualizar la dirección previa
+
+  // Verificar colisión con el cuerpo
+  checkSelfCollision();
 }
 
 void generateFood() {
-  int cols = 800 / boxSize - 1; // Número de columnas
-  int rows = 800 / boxSize - 1; // Número de filas
+  int cols = 800 / boxSize; // Número de columnas en la cuadrícula
+  int rows = 800 / boxSize; // Número de filas en la cuadrícula
 
-  // Generar una posición aleatoria dentro de los límites de la cuadrícula (sin incluir barreras)
+  // Generar una posición aleatoria dentro de los límites de la cuadrícula
   do {
     int x = (int) random(-cols / 2, cols / 2) * boxSize;
     int y = (int) random(-rows / 2, rows / 2) * boxSize;
     food = new PVector(x, y, 0);
-  } while (x <= -400 || x >= 400 || y <= -400 || y >= 400);
+  } while (Math.abs(food.x) >= 400 || Math.abs(food.y) >= 400);
+}
+
+void growSnake() {
+  // Crear un nuevo array con un segmento adicional
+  PVector[] newSnake = new PVector[snake.length + 1];
+
+  // Copiar los segmentos existentes al nuevo array
+  for (int i = 0; i < snake.length; i++) {
+    newSnake[i] = snake[i].copy();
+  }
+
+  // Agregar un nuevo segmento al final, en la misma posición que el último segmento
+  newSnake[snake.length] = snake[snake.length - 1].copy();
+
+  // Reemplazar el array original con el nuevo array más grande
+  snake = newSnake;
+}
+
+void checkSelfCollision() {
+  // Verificar si la cabeza colisiona con algún segmento del cuerpo
+  for (int i = 1; i < snake.length; i++) {
+    if (snake[0].equals(snake[i])) {
+      isGameOver = true; // Terminar el juego
+      return;
+    }
+  }
+}
+
+void mousePressed() {
+  if (!isGameStarted) {
+    // Verificar si se hizo clic en el botón "Normal"
+    if (mouseX > width / 2 - 75 && mouseX < width / 2 + 75 && mouseY > height / 2 + 25 && mouseY < height / 2 + 75) {
+      easyMode = true;
+      isGameStarted = true;
+    }
+
+    // Verificar si se hizo clic en el botón "Difícil"
+    if (mouseX > width / 2 - 75 && mouseX < width / 2 + 75 && mouseY > height / 2 + 125 && mouseY < height / 2 + 175) {
+      easyMode = false;
+      isGameStarted = true;
+    }
+  }
 }
 
 void keyPressed() {
@@ -179,7 +266,4 @@ void keyPressed() {
   if ((key == 'S' || key == 's') && previousDirection != 'W') currentDirection = 'S';
   if ((key == 'A' || key == 'a') && previousDirection != 'D') currentDirection = 'A';
   if ((key == 'D' || key == 'd') && previousDirection != 'A') currentDirection = 'D';
-
-  // Alternar entre modo fácil y difícil con la tecla M
-  if (key == 'M' || key == 'm') easyMode = !easyMode;
 }
