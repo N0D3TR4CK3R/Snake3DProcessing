@@ -1,3 +1,5 @@
+import processing.sound.*;
+
 int boxSize = 40;
 PVector[] snake = new PVector[3];
 char currentDirection = 'D';
@@ -8,7 +10,12 @@ PVector food;
 int score = 0;
 boolean isGameStarted = false;
 boolean showGameOverScreen = false;
-PImage snakeSkin, snakeFace, cocoTexture, steelTexture, lavaTexture;
+PImage snakeSkin, snakeFace, cocoTexture, steelTexture, lavaTexture, bannerSprite, normalBtnSprite, hardBtnSprite;
+PShader snakeShader; 
+float shaderTime = 0;
+SoundFile normalModeSound, hardModeSound, buttonSound, pointSound, gameOverSound;
+PFont font;
+
 
 void setup() {
   size(800, 800, P3D);
@@ -20,12 +27,34 @@ void setup() {
   cocoTexture = loadImage("sprites/coconut_sprite/coconut.png");
   steelTexture = loadImage("sprites/barrier_sprites/steel.png");
   lavaTexture = loadImage("sprites/barrier_sprites/lava.png");
+  bannerSprite = loadImage("sprites/screen_sprites/baner_sprite.png");
+  normalBtnSprite = loadImage("sprites/screen_sprites/normal_btn.png");
+  hardBtnSprite = loadImage("sprites/screen_sprites/hard_btn.png");
   
   // Verificar carga de texturas
-  if (snakeSkin == null || snakeFace == null || steelTexture == null || lavaTexture == null || cocoTexture == null) {
+  if (snakeSkin == null || snakeFace == null || steelTexture == null || lavaTexture == null || cocoTexture == null || bannerSprite == null || normalBtnSprite == null || hardBtnSprite == null) {
     println("Error: No se encontraron las texturas. Verifica la ruta.");
     exit();
   }
+
+  // Cargar shaders
+  snakeShader = loadShader("shaders/snake_frag.glsl", "shaders/snake_vert.glsl");
+
+   // Verificar carga de shaders
+  if (snakeShader == null) {
+    println("Error: No se pudo cargar el shader. Verifica la ruta.");
+    exit();
+  }
+
+    // Carga de sonidos
+    normalModeSound = new SoundFile(this, "sounds/normal_mode.mp3");
+    hardModeSound = new SoundFile(this, "sounds/hard_mode.mp3");
+    buttonSound = new SoundFile(this, "sounds/btn_pressed.mp3");
+    pointSound = new SoundFile(this, "sounds/point_sound.mp3"); 
+    gameOverSound= new SoundFile(this, "sounds/game_over.mp3");
+    
+    //Cargamos fuente customizada
+    font = createFont("fonts/Daydream.ttf",32);
 
   // Inicializar serpiente
   for (int i = 0; i < snake.length; i++) {
@@ -53,6 +82,7 @@ void draw() {
   drawGrid();
   drawBarriers();
   
+  shaderTime += 0.05; // Ajusta este valor para cambiar la velocidad de la pulsación
   // Dibujar serpiente con texturas
    for (int i = 0; i < snake.length; i++) {
     if (i == 0) {
@@ -61,7 +91,7 @@ void draw() {
       drawSnakeBody(snake[i]); // Cuerpo con textura normal
     }
   }
-  
+  resetShader();
   drawFood();
 
   hint(DISABLE_DEPTH_TEST);
@@ -69,6 +99,34 @@ void draw() {
   hint(ENABLE_DEPTH_TEST);
 
   updateSnake();
+  updateMusic();
+}
+
+void updateMusic() {
+  if (isGameStarted && !showGameOverScreen) {
+    if (easyMode) {
+      if (normalModeSound != null && !normalModeSound.isPlaying()) {
+        normalModeSound.loop();
+      }
+      if (hardModeSound != null) {
+        hardModeSound.stop();
+      }
+    } else {
+      if (normalModeSound != null) {
+        normalModeSound.stop();
+      }
+      if (hardModeSound != null && !hardModeSound.isPlaying()) {
+        hardModeSound.loop();
+      }
+    }
+  } else {
+    if (normalModeSound != null) {
+      normalModeSound.stop();
+    }
+    if (hardModeSound != null) {
+      hardModeSound.stop();
+    }
+  }
 }
 
 void drawSnakeHead(PVector pos) {
@@ -76,13 +134,19 @@ void drawSnakeHead(PVector pos) {
   translate(width/2 + pos.x, height/2 - pos.y, pos.z);
   float hs = boxSize / 2; // Mitad del tamaño del cubo
   
+  // Aplicar shader y pasar la textura
+  shader(snakeShader);
+  snakeShader.set("texture", snakeFace); // Pasar la textura al shader
+  
   // Configurar el modo de textura
   textureMode(NORMAL);
 
   // Cara frontal (Z+) - Textura especial (snakeFace) rotada según la dirección
   beginShape(QUADS);
   texture(snakeFace);
-  
+  shader(snakeShader);
+  snakeShader.set("texture", snakeFace);
+  snakeShader.set("time", shaderTime);
   // Ajustar coordenadas UV según la dirección
   switch (currentDirection) {
     case 'W': // Arriba
@@ -110,6 +174,7 @@ void drawSnakeHead(PVector pos) {
       vertex(-hs, hs, hs, 0, 1);
       break;
   }
+  resetShader();
   endShape();
 
   // Cara trasera (Z-) - Textura normal (snakeSkin)
@@ -156,8 +221,10 @@ void drawSnakeHead(PVector pos) {
   vertex(hs, hs, hs, 1, 1);   // Esquina superior derecha
   vertex(-hs, hs, hs, 0, 1);  // Esquina superior izquierda
   endShape();
-
+  
+  resetShader();
   popMatrix();
+  
 }
 
 // Función para el CUERPO (segmentos 2+)
@@ -222,42 +289,66 @@ void drawSnakeBody(PVector pos) {
   endShape();
   
   popMatrix();
+  
 }
 
 void drawStartScreen() {
   background(0);
-  fill(255, 0, 0);
-  rectMode(CENTER);
-  rect(width/2, height/2 - 100, 200, 100);
   
-  fill(0, 255, 0);
-  rect(width/2, height/2 + 50, 150, 50);
-  rect(width/2, height/2 + 150, 150, 50);
+  // Dibujar banner centrado
+  imageMode(CENTER);
+  image(bannerSprite, width/2, height/2 - 100, 300, 150); // Ajustar tamaño según necesidad
   
-  fill(0);
-  textSize(24);
-  textAlign(CENTER, CENTER);
-  text("Normal", width/2, height/2 + 50);
-  text("Difícil", width/2, height/2 + 150);
+  // Botones con sprites
+  image(normalBtnSprite, width/2, height/2 + 50, 180, 70);
+  image(hardBtnSprite, width/2, height/2 + 150, 180, 70);
+
+  drawButtonHoverEffect();
 }
 
 void drawGameOverScreen() {
   background(0);
-  fill(255, 0, 0);
+  
+  // Texto de game over
+  textFont(font);
   textSize(32);
+  fill(255, 0, 0);
   textAlign(CENTER, CENTER);
   text("GAME OVER", width/2, height/2 - 100);
-  
   textSize(24);
   text("Puntaje: " + score, width/2, height/2 - 50);
   
-  fill(0, 255, 0);
-  rect(width/2, height/2 + 50, 150, 50);
-  rect(width/2, height/2 + 150, 150, 50);
+  // Botones con sprites
+  imageMode(CENTER);
+  image(normalBtnSprite, width/2, height/2 + 50, 180, 70);
+  image(hardBtnSprite, width/2, height/2 + 150, 180, 70);
+
+  drawButtonHoverEffect();
+}
+
+void drawButtonHoverEffect() {
+  rectMode(CENTER); // Asegurar mismo modo que los botones
+  noFill();
+  strokeWeight(3);
+  float buttonWidth = 180;
+  float buttonHeight = 70;
   
-  fill(0);
-  text("Normal", width/2, height/2 + 50);
-  text("Difícil", width/2, height/2 + 150);
+  // Botón normal
+  if (mouseOver(width/2, height/2 + 50, buttonWidth, buttonHeight)) {
+    stroke(255, 200);
+    rect(width/2, height/2 + 50, buttonWidth, buttonHeight, 10);
+  }
+  
+  // Botón difícil
+  if (mouseOver(width/2, height/2 + 150, buttonWidth, buttonHeight)) {
+    stroke(255, 200);
+    rect(width/2, height/2 + 150, buttonWidth, buttonHeight, 10);
+  }
+}
+
+boolean mouseOver(float x, float y, float w, float h) {
+  return mouseX > x - w/2 && mouseX < x + w/2 && 
+         mouseY > y - h/2 && mouseY < y + h/2;
 }
 
 void drawGrid() {
@@ -351,22 +442,15 @@ void drawBarrierSegment(float x, float y, PImage tex) {
 void drawFood() {
   pushMatrix();
   translate(width/2 + food.x, height/2 - food.y, food.z);
-  
-  // Configurar el modo de textura
-  textureMode(NORMAL);
-  
-  // Dibujar la esfera con textura
-  beginShape(SPHERE);
   texture(cocoTexture);
-  sphere(boxSize / 2); // Tamaño de la esfera
-  endShape();
-  
+  sphere(boxSize / 2);
   popMatrix();
 }
 
 void drawUI() {
-  fill(255);
-  textSize(20);
+  textFont(font);
+  fill(255,255,200);
+  textSize(30);
   textAlign(LEFT, TOP);
   text("Puntaje: " + score, 10, 10);
 }
@@ -394,6 +478,7 @@ void updateSnake() {
   if (nextPosition.equals(food)) {
     score++;
     generateFood();
+    pointSound.play();
     growSnake();
   }
 
@@ -428,6 +513,7 @@ void growSnake() {
 void checkSelfCollision() {
   for (int i = 1; i < snake.length; i++) {
     if (snake[0].equals(snake[i])) {
+      gameOverSound.play();
       showGameOverScreen = true;
       isGameOver = true;
       return;
@@ -443,6 +529,7 @@ void mousePressed() {
                        mouseY > height/2 + 125 && mouseY < height/2 + 175;
 
     if (clickNormal || clickHard) {
+      buttonSound.play();
       isGameStarted = true;
       showGameOverScreen = false;
       isGameOver = false;
